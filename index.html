@@ -1,0 +1,784 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>尺规作图 · 作线段的黄金分割点</title>
+<style>
+  :root{
+    --bg:#c4d8e4;        /* 主色 */
+    --bg-hi:#d3e2ec;
+    --bg-lo:#b7cedd;
+    --paper:#eaf2f8;     /* 画板纸面 */
+    --ink:#193c54;
+    --ink2:#41627a;
+    --soft:#4d7fa2;
+    --aux:#8fb2c9;
+    --grid:#d5e4ee;
+    --gold:#c08a2e;
+    --gold-d:#a8761f;
+    --line:#b9d1e0;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;overflow:hidden;}
+  body{
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+    color:var(--ink);
+    background:#a6c1d5;
+  }
+
+  /* 整个页面按 1600×900 设计稿等比缩放，永远保持 16:9 */
+  .stage{
+    position:absolute;left:50%;top:50%;
+    width:1600px;height:900px;
+    margin-left:-800px;margin-top:-450px;
+    transform-origin:center center;
+    background:
+      radial-gradient(1100px 760px at 22% -14%, rgba(255,255,255,.30) 0%, rgba(255,255,255,0) 62%),
+      var(--bg);
+    display:flex;flex-direction:column;
+    overflow:hidden;
+  }
+
+  /* ---------- 标题 ---------- */
+  .bar{display:flex;align-items:baseline;gap:18px;padding:22px 44px 6px;flex:0 0 auto;}
+  .bar h1{
+    margin:0;font-size:24px;letter-spacing:.05em;font-weight:600;color:var(--ink);
+    display:flex;align-items:center;gap:10px;
+  }
+  .bar h1::before{
+    content:'';width:6px;height:23px;border-radius:3px;background:var(--gold);display:block;
+  }
+  .bar p{margin:0;font-size:14.5px;color:#4f728b;letter-spacing:.02em;}
+
+  /* ---------- 主体 ---------- */
+  .app{
+    flex:1;min-height:0;
+    display:grid;grid-template-columns:minmax(0,1fr) 420px;
+    gap:20px;padding:8px 44px 6px;
+  }
+
+  .board-wrap{
+    display:flex;align-items:center;justify-content:center;
+    min-width:0;min-height:0;
+  }
+
+  /* 画板严格 16:9，尺寸由 JS 按可用空间等比计算 */
+  .board{
+    position:relative;
+    background:var(--paper);
+    border-radius:12px;
+    box-shadow:
+      0 0 0 1px #aac5d6,
+      0 22px 48px -22px rgba(24,62,90,.48);
+    overflow:hidden;
+    flex:0 0 auto;
+  }
+  .board::after{
+    content:'';position:absolute;inset:0;pointer-events:none;border-radius:12px;
+    box-shadow:inset 0 0 90px rgba(150,185,210,.22);
+  }
+  .board svg{width:100%;height:100%;display:block;}
+
+  /* ---------- 侧栏 ---------- */
+  .panel{
+    display:flex;flex-direction:column;gap:10px;min-height:0;overflow-y:auto;
+    padding-right:2px;
+  }
+  .panel::-webkit-scrollbar{width:6px;}
+  .panel::-webkit-scrollbar-thumb{background:#a6c2d4;border-radius:3px;}
+
+  .card{
+    background:rgba(246,251,254,.86);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:14px 17px;
+    box-shadow:0 1px 3px rgba(30,70,100,.07);
+    flex:0 0 auto;
+  }
+  .card h3{
+    margin:0 0 11px;font-size:12px;letter-spacing:.16em;font-weight:600;color:#5b7f97;
+  }
+
+  #stepList{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px;}
+  #stepList li{
+    display:flex;gap:9px;align-items:flex-start;
+    padding:6px 10px 6px 9px;border-radius:9px;cursor:pointer;
+    font-size:15px;line-height:1.55;color:var(--ink2);
+    border-left:2px solid transparent;
+    transition:background .2s,color .2s,border-color .2s;
+  }
+  #stepList li:hover{background:#e6f0f7;}
+  #stepList li .num{
+    flex:0 0 20px;height:20px;border-radius:50%;
+    background:#dbe9f3;color:#5b7f97;
+    font-size:12px;font-weight:600;
+    display:grid;place-items:center;margin-top:2px;
+    transition:.25s;
+  }
+  #stepList li.done .num{background:#c6dccc;color:#4f7a5b;}
+  #stepList li.active{
+    background:#dcebf5;border-left-color:var(--gold);color:var(--ink);font-weight:600;
+  }
+  #stepList li.active .num{background:var(--gold);color:#fff;}
+
+  .mgrid{display:grid;grid-template-columns:1fr 1fr;column-gap:20px;}
+  .mgrid .mrow:nth-last-child(-n+2){border-bottom:0;}
+
+  .mrow{
+    display:flex;justify-content:space-between;align-items:baseline;
+    padding:5px 2px;font-size:15px;color:var(--ink2);
+    border-bottom:1px dashed #d5e4ee;
+    opacity:.18;transition:opacity .45s ease;
+  }
+  .mrow:last-child{border-bottom:0;}
+  .mrow.show{opacity:1;}
+  .mrow b{font-family:Georgia,"Times New Roman",serif;font-size:16px;font-weight:600;color:var(--ink);}
+  .mrow.key b{color:var(--gold-d);}
+
+  .derive{
+    margin-top:8px;padding-top:8px;border-top:1px solid #d5e4ee;
+    font-family:"Songti SC","Noto Serif SC",Georgia,serif;
+    font-size:13.5px;line-height:1.85;color:#4a6b81;
+    display:none;
+  }
+  .derive.show{display:block;}
+  .derive em{font-style:normal;color:var(--gold-d);font-weight:600;}
+
+  .hint{
+    background:#e7f1f8;border-color:#c2d9e7;
+    font-size:13.5px;line-height:1.75;color:#44657c;
+    padding:14px 16px;
+  }
+  .hint::before{
+    content:'课堂提示';display:block;font-size:10.5px;letter-spacing:.14em;
+    color:#a8761f;font-weight:600;margin-bottom:5px;
+  }
+
+  /* ---------- 工具栏 ---------- */
+  .toolbar{
+    flex:0 0 auto;display:flex;align-items:center;gap:14px;
+    padding:12px 44px 22px;justify-content:flex-end;
+  }
+  button{
+    font:inherit;font-size:15.5px;font-weight:500;
+    padding:10px 24px;border-radius:9px;
+    border:1px solid #b3cbdb;background:#f6fafd;color:var(--ink);
+    cursor:pointer;transition:.18s;
+  }
+  button:hover:not(:disabled){background:#e6f0f7;border-color:#94b6cb;}
+  button:disabled{opacity:.34;cursor:not-allowed;}
+  button.primary{
+    background:var(--gold);border-color:var(--gold);color:#fff;
+    box-shadow:0 3px 10px -3px rgba(168,118,31,.55);
+  }
+  button.primary:hover:not(:disabled){background:var(--gold-d);border-color:var(--gold-d);}
+  button.ghost{background:transparent;border-color:transparent;color:#5b7f97;padding:9px 12px;}
+  button.ghost:hover:not(:disabled){background:#bcd3e2;}
+
+  button#play{
+    border-color:#ddc79a;background:#fdf8ec;color:var(--gold-d);font-weight:600;
+    letter-spacing:.02em;
+  }
+  button#play:hover:not(:disabled){background:#f9f0da;border-color:#d2b783;}
+  button#play.playing{
+    background:var(--gold);border-color:var(--gold);color:#fff;
+    box-shadow:0 3px 10px -3px rgba(168,118,31,.55);
+  }
+  button#play.playing:hover{background:var(--gold-d);border-color:var(--gold-d);}
+
+  .progress{flex:1;order:-1;display:flex;gap:6px;align-items:center;justify-content:flex-end;padding-right:6px;}
+  .progress i{
+    display:block;width:34px;height:5px;border-radius:3px;
+    background:#a9c3d4;transition:.35s ease;cursor:pointer;
+  }
+  .progress i.on{background:var(--gold);}
+
+</style>
+<meta name="AIGC" content="{&#34;AIGC&#34;:{&#34;Label&#34;:&#34;1&#34;,&#34;ContentProducer&#34;:&#34;001191340000711771143J00000&#34;,&#34;ProduceID&#34;:&#34;f3fbb0398b54b349861a46e9b3ec9aab01c2586f2aa45039daff631482debe61&#34;,&#34;ReservedCode1&#34;:&#34;&#34;,&#34;ContentPropagator&#34;:&#34;001191340000711771143J00000&#34;,&#34;PropagateID&#34;:&#34;f3fbb0398b54b349861a46e9b3ec9aab01c2586f2aa45039daff631482debe61&#34;,&#34;ReservedCode2&#34;:&#34;&#34;}}"/></head>
+<body>
+
+<div class="stage" id="stage">
+
+<header class="bar">
+  <h1>尺规作图 · 线段的黄金分割点</h1>
+  <p>求作点 P，使 AP : AB = (√5−1)/2 ≈ 0.618</p>
+</header>
+
+<div class="app">
+  <div class="board-wrap" id="boardWrap">
+    <section class="board" id="board">
+      <svg id="boardSvg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet" role="img" aria-label="黄金分割点尺规作图演示">
+        <defs>
+          <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+            <path d="M60 0 H0 V60" fill="none" stroke="#d7e5ee" stroke-width="1.4"></path>
+          </pattern>
+        </defs>
+        <rect x="0" y="0" width="1600" height="900" fill="url(#grid)"></rect>
+        <g id="scene"></g>
+      </svg>
+    </section>
+  </div>
+
+  <aside class="panel">
+    <div class="card">
+      <h3>作 图 步 骤</h3>
+      <ol id="stepList">
+        <li data-n="1"><span class="num">1</span><span class="txt">作一条线段 AB</span></li>
+        <li data-n="2"><span class="num">2</span><span class="txt">过点 B 作 AB 的垂线，在垂线上截取点 C，使 BC = AB/2</span></li>
+        <li data-n="3"><span class="num">3</span><span class="txt">连接 AC</span></li>
+        <li data-n="4"><span class="num">4</span><span class="txt">以点 C 为圆心、CB 为半径画弧，交 AC 于点 D</span></li>
+        <li data-n="5"><span class="num">5</span><span class="txt">以点 A 为圆心、AD 为半径画弧，交 AB 于点 P</span></li>
+        <li data-n="6"><span class="num">6</span><span class="txt">度量验证：AP ÷ AB 是否等于 0.618</span></li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h3>长 度（设 AB = 1）</h3>
+      <div class="mgrid">
+        <div class="mrow" data-need="1"><span>AB</span><b>1.000</b></div>
+        <div class="mrow" data-need="2"><span>BC</span><b>0.500</b></div>
+        <div class="mrow" data-need="3"><span>AC</span><b>1.118</b></div>
+        <div class="mrow" data-need="4"><span>CD</span><b>0.500</b></div>
+        <div class="mrow" data-need="4"><span>AD</span><b>0.618</b></div>
+        <div class="mrow" data-need="5"><span>AP</span><b>0.618</b></div>
+        <div class="mrow" data-need="6"><span>PB</span><b>0.382</b></div>
+        <div class="mrow key" data-need="6"><span>AP : AB</span><b>0.618</b></div>
+      </div>
+
+      <div class="derive" id="derive">
+        设 AB = 2a ⇒ BC = a，AC = √5·a，CD = a<br/>
+        AD = AC − CD = (√5 − 1)a = AP<br/>
+        ∴ AP : AB = <em>(√5 − 1)/2 ≈ 0.618</em>
+      </div>
+    </div>
+
+    <div class="card hint" id="hint">点击「下一步」，跟老师一起把这条线段画出来。</div>
+  </aside>
+</div>
+
+<footer class="toolbar">
+  <button id="prev">← 上一步</button>
+  <div class="progress" id="progress"></div>
+  <button id="next" class="primary">下一步 →</button>
+  <button id="play" title="自动依次演示全部步骤，播完自动重来（快捷键 P）">▶ 循环播放</button>
+  <button id="reset" class="ghost">重来</button>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const scene = document.getElementById('scene');
+
+  /* ---------- 配色（与主色 #c4d8e4 同色系） ---------- */
+  const INK   = '#193c54';
+  const SOFT  = '#4d7fa2';
+  const AUX   = '#8fb2c9';
+  const GOLD  = '#c08a2e';
+  const PAPER = '#eaf2f8';
+
+  /* ---------- 整页固定 16:9：1600×900 设计稿整体等比缩放 ---------- */
+  function fitStage(){
+    const stage = document.getElementById('stage');
+    if(!stage) return;
+    const s = Math.min(window.innerWidth / 1600, window.innerHeight / 900);
+    stage.style.transform = 'scale(' + s + ')';
+  }
+
+  /* ---------- 画板在舞台内保持 16:9 ---------- */
+  function fitBoard(){
+    const wrap = document.getElementById('boardWrap');
+    const board = document.getElementById('board');
+    if(!wrap || !board) return;
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    if(!w || !h) return;
+    const s = Math.min(w / 16, h / 9);
+    board.style.width  = (s * 16).toFixed(2) + 'px';
+    board.style.height = (s * 9).toFixed(2) + 'px';
+  }
+  function fitAll(){ fitStage(); fitBoard(); }
+  window.addEventListener('resize', fitAll);
+  fitAll();
+  window.addEventListener('load', fitAll);
+
+  /* ---------- 几何常量（画布逻辑坐标 1600×900 = 16:9） ----------
+     A(250,655)  B(1250,655)  AB = 1000
+     过 B 作垂线向上，BC = AB/2 = 500  →  C(1250,155)
+     AC = √(1000²+500²) = 500√5 ≈ 1118.03
+     CD = CB = 500  →  AD = AC − CD ≈ 618.03
+     D 在 AC 上，P 在 AB 上，AP = AD
+  --------------------------------------------------------------- */
+  const A = {x:250,  y:655};
+  const B = {x:1250, y:655};
+  const C = {x:1250, y:155};
+
+  const BCv = B.y - C.y;                                  // 500
+  const AC  = Math.hypot(C.x - A.x, C.y - A.y);           // 1118.03
+  const AD  = AC - BCv;                                   // 618.03
+
+  const D = {
+    x: A.x + (C.x - A.x) * AD / AC,
+    y: A.y + (C.y - A.y) * AD / AC
+  };
+  const P = { x: A.x + AD, y: A.y };
+
+  const ANG_AC = Math.atan2(C.y - A.y, C.x - A.x) * 180 / Math.PI;  // -26.565
+
+  /* ---------- DOM 小工具 ---------- */
+  function el(tag, attrs){
+    const e = document.createElementNS(NS, tag);
+    if(attrs) for(const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  function txt(x, y, s, o){
+    o = o || {};
+    const t = el('text', {
+      x: x, y: y,
+      'text-anchor': o.anchor || 'middle',
+      'dominant-baseline': 'middle',
+      'font-size': o.size || 30,
+      'font-weight': o.weight || 400,
+      'font-style': o.italic ? 'italic' : 'normal',
+      'font-family': o.fam || '"Songti SC","Noto Serif SC","SimSun",Georgia,serif',
+      fill: o.fill || INK
+    });
+    t.textContent = s;
+    if(o.rotate) t.setAttribute('transform', 'rotate(' + o.rotate + ' ' + x + ' ' + y + ')');
+    return t;
+  }
+
+  function dot(p, color, r){
+    return el('circle', {
+      cx: p.x, cy: p.y, r: r || 8,
+      fill: color || INK, stroke: PAPER, 'stroke-width': 3
+    });
+  }
+
+  function arcPath(cx, cy, r, a1, a2){
+    const rad = Math.PI / 180;
+    const p1 = { x: cx + r * Math.cos(a1 * rad), y: cy + r * Math.sin(a1 * rad) };
+    const p2 = { x: cx + r * Math.cos(a2 * rad), y: cy + r * Math.sin(a2 * rad) };
+    const large = Math.abs(a2 - a1) > 180 ? 1 : 0;
+    const sweep = a2 > a1 ? 1 : 0;
+    return 'M ' + p1.x.toFixed(2) + ' ' + p1.y.toFixed(2) +
+           ' A ' + r + ' ' + r + ' 0 ' + large + ' ' + sweep + ' ' +
+           p2.x.toFixed(2) + ' ' + p2.y.toFixed(2);
+  }
+
+  /* ---------- 动画 ---------- */
+  const raf2 = function(fn){
+    requestAnimationFrame(function(){ requestAnimationFrame(fn); });
+  };
+
+  /* 缓动：先慢后快再慢，接近手在纸上匀速走笔的手感 */
+  function easeInOut(p){
+    return p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+  }
+
+  /* 线段/弧线生长：线头推进 + 笔尖光点跟随，两者严格同步 */
+  function drawIn(node, delay, dur){
+    let len = 0;
+    try { len = node.getTotalLength(); } catch(e) { len = 0; }
+    if(!len) { fadeIn(node, delay || 0, 400); return; }
+
+    const D  = dur || 600;
+    const t0 = Date.now() + (delay || 0);
+
+    node.style.strokeDasharray  = String(len);
+    node.style.strokeDashoffset = String(len);
+    node.style.transition = 'none';
+
+    const halo = el('circle', {
+      cx:0, cy:0, r:0, fill:GOLD, opacity:'0', 'pointer-events':'none'
+    });
+    const tip = el('circle', {
+      cx:0, cy:0, r:0, fill:GOLD, stroke:PAPER, 'stroke-width':1.2,
+      opacity:'0', 'pointer-events':'none'
+    });
+    const host = node.parentNode;
+    if(!host) return;
+    host.appendChild(halo);
+    host.appendChild(tip);
+
+    // 兜底：动画被打断（快速连点/重建）时也要把笔尖清掉
+    setTimeout(function(){
+      if(tip.parentNode)  tip.parentNode.removeChild(tip);
+      if(halo.parentNode) halo.parentNode.removeChild(halo);
+    }, (delay || 0) + D + 420);
+
+    let started = false;
+
+    function frame(){
+      if(!tip.parentNode) return;                 // 节点已被重建/清空，停手
+
+      let p = (Date.now() - t0) / D;
+      if(p < 0) { requestAnimationFrame(frame); return; }
+      if(p > 1) p = 1;
+
+      if(!started){
+        started = true;
+        tip.style.opacity = '1';
+        halo.style.opacity = '.30';
+      }
+
+      const e  = easeInOut(p);
+      const pt = node.getPointAtLength(len * e);
+      const r  = 5 + 1.8 * Math.sin(p * Math.PI);   // 走笔时轻微呼吸
+
+      node.style.strokeDashoffset = String(len * (1 - e));
+      tip.setAttribute('cx', pt.x.toFixed(2));
+      tip.setAttribute('cy', pt.y.toFixed(2));
+      tip.setAttribute('r', r.toFixed(2));
+      halo.setAttribute('cx', pt.x.toFixed(2));
+      halo.setAttribute('cy', pt.y.toFixed(2));
+      halo.setAttribute('r', (r * 2.8).toFixed(2));
+
+      if(p < 1){
+        requestAnimationFrame(frame);
+      } else {
+        node.style.strokeDashoffset = '0';
+        tip.style.transition  = 'opacity 300ms ease';
+        halo.style.transition = 'opacity 300ms ease';
+        tip.style.opacity  = '0';
+        halo.style.opacity = '0';
+        setTimeout(function(){
+          if(tip.parentNode)  tip.parentNode.removeChild(tip);
+          if(halo.parentNode) halo.parentNode.removeChild(halo);
+        }, 340);
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function fadeIn(node, delay, dur){
+    node.style.opacity = '0';
+    node.style.transition = 'opacity ' + (dur || 420) + 'ms ease ' + (delay || 0) + 'ms';
+    node.getBoundingClientRect();
+    raf2(function(){ node.style.opacity = '1'; });
+  }
+
+  function popIn(node, delay){
+    node.style.transformBox = 'fill-box';
+    node.style.transformOrigin = 'center';
+    node.style.transform = 'scale(.15)';
+    node.style.opacity = '0';
+    node.style.transition =
+      'transform 420ms cubic-bezier(.34,1.56,.64,1) ' + (delay || 0) + 'ms, opacity 240ms ease ' + (delay || 0) + 'ms';
+    node.getBoundingClientRect();
+    raf2(function(){
+      node.style.transform = 'scale(1)';
+      node.style.opacity = '1';
+    });
+  }
+
+  /* ---------- 逐步构建 ---------- */
+  function buildStep(n, anim){
+    const g = el('g');
+    scene.appendChild(g);
+
+    const add  = function(node){ g.appendChild(node); return node; };
+    const draw = function(node, d, dur){ if(anim) drawIn(node, d, dur); };
+    const pop  = function(node, d){ if(anim) popIn(node, d); };
+    const fade = function(node, d, dur){ if(anim) fadeIn(node, d, dur); };
+
+    /* ① 作线段 AB */
+    if(n === 1){
+      const ab = add(el('line', {
+        x1:A.x, y1:A.y, x2:B.x, y2:B.y,
+        stroke:INK, 'stroke-width':4.5, 'stroke-linecap':'round'
+      }));
+      draw(ab, 60, 720);
+
+      pop(add(dot(A, INK)), 700);
+      pop(add(dot(B, INK)), 780);
+      fade(add(txt(A.x, A.y + 48, 'A', {size:32})), 740);
+      fade(add(txt(B.x, B.y + 48, 'B', {size:32})), 820);
+    }
+
+    /* ② 过 B 作垂线，截取 BC = AB/2 */
+    if(n === 2){
+      // 垂线在 C 之上的延长（虚线，表示垂线无限延伸）
+      const ext = add(el('line', {
+        x1:C.x, y1:C.y - 6, x2:C.x, y2:C.y - 64,
+        stroke:AUX, 'stroke-width':2.4,
+        'stroke-dasharray':'9 9', 'stroke-linecap':'round'
+      }));
+      fade(ext, 0, 400);
+
+      // 直角符号
+      const ra = add(el('path', {
+        d:'M ' + (B.x - 24) + ' ' + B.y + ' L ' + (B.x - 24) + ' ' + (B.y - 24) + ' L ' + B.x + ' ' + (B.y - 24),
+        fill:'none', stroke:INK, 'stroke-width':2.4, 'stroke-linecap':'round'
+      }));
+      draw(ra, 200, 320);
+
+      // BC 段
+      const bc = add(el('line', {
+        x1:B.x, y1:B.y, x2:C.x, y2:C.y,
+        stroke:INK, 'stroke-width':4.5, 'stroke-linecap':'round'
+      }));
+      draw(bc, 380, 520);
+
+      pop(add(dot(C, INK)), 800);
+      fade(add(txt(C.x + 38, C.y + 3, 'C', {size:32, anchor:'start'})), 850);
+
+      fade(add(txt(B.x + 34, (B.y + C.y) / 2 + 3, 'BC = AB/2', {
+        size:22, fill:SOFT, anchor:'start', italic:true, weight:600
+      })), 900);
+    }
+
+    /* ③ 连接 AC */
+    if(n === 3){
+      const ac = add(el('line', {
+        x1:A.x, y1:A.y, x2:C.x, y2:C.y,
+        stroke:INK, 'stroke-width':4.5, 'stroke-linecap':'round'
+      }));
+      draw(ac, 0, 640);
+
+      const mid = { x:(A.x + C.x) / 2, y:(A.y + C.y) / 2 };
+      const rad = ANG_AC * Math.PI / 180;
+      const nx = Math.sin(rad), ny = -Math.cos(rad);   // 法线，指向左上
+      const lab = add(txt(mid.x + nx * 38, mid.y + ny * 38, 'AC', {
+        size:26, fill:SOFT, italic:true, weight:600, rotate:ANG_AC
+      }));
+      fade(lab, 600);
+    }
+
+    /* ④ 以 C 为圆心、CB 为半径画弧，交 AC 于 D */
+    if(n === 4){
+      const arc = add(el('path', {
+        d: arcPath(C.x, C.y, BCv, 87, 160),
+        fill:'none', stroke:SOFT, 'stroke-width':2.8, 'stroke-linecap':'round'
+      }));
+      draw(arc, 0, 760);
+
+      pop(add(dot(D, GOLD)), 720);
+      fade(add(txt(D.x + 22, D.y - 44, 'D', {size:32, fill:GOLD})), 780);
+    }
+
+    /* ⑤ 以 A 为圆心、AD 为半径画弧，交 AB 于 P */
+    if(n === 5){
+      const arc = add(el('path', {
+        d: arcPath(A.x, A.y, AD, -33, 0),
+        fill:'none', stroke:SOFT, 'stroke-width':2.8, 'stroke-linecap':'round'
+      }));
+      draw(arc, 0, 760);
+
+      pop(add(dot(P, GOLD)), 720);
+      fade(add(txt(P.x, P.y + 48, 'P', {size:32, fill:GOLD})), 780);
+    }
+
+    /* ⑥ 度量验证 */
+    if(n === 6){
+      // 底层：PB 段高亮
+      add(el('line', {
+        x1:P.x, y1:P.y, x2:B.x, y2:B.y,
+        stroke:SOFT, 'stroke-width':13, 'stroke-linecap':'round', opacity:.42
+      }));
+      // 上层：AP 段高亮
+      add(el('line', {
+        x1:A.x, y1:A.y, x2:P.x, y2:P.y,
+        stroke:GOLD, 'stroke-width':13, 'stroke-linecap':'round', opacity:.92
+      }));
+
+      // 关键点重绘到最上层
+      add(dot(A, INK));
+      add(dot(B, INK));
+      add(dot(P, GOLD, 9.5));
+      add(txt(A.x, A.y + 48, 'A', {size:32}));
+      add(txt(B.x, B.y + 48, 'B', {size:32}));
+      add(txt(P.x, P.y + 48, 'P', {size:32, fill:GOLD, weight:600}));
+
+      // 度量条
+      dimBar(g, A.x, P.x, 790, 'AP ≈ 0.618 · AB', GOLD, anim, 250);
+      dimBar(g, P.x, B.x, 790, 'PB ≈ 0.382 · AB', SOFT, anim, 550);
+
+      // 结论
+      fade(add(txt(560, 76, 'P 即为 AB 的黄金分割点', {
+        size:36, fill:GOLD, weight:700,
+        fam:'"PingFang SC","Microsoft YaHei",sans-serif'
+      })), 850, 600);
+    }
+  }
+
+  function dimBar(g, x1, x2, y, label, color, anim, delay){
+    const p = el('path', {
+      d: 'M ' + x1 + ' ' + (y - 13) + ' L ' + x1 + ' ' + (y + 13) +
+         ' M ' + x1 + ' ' + y + ' L ' + x2 + ' ' + y +
+         ' M ' + x2 + ' ' + (y - 13) + ' L ' + x2 + ' ' + (y + 13),
+      fill:'none', stroke:color, 'stroke-width':2.4, 'stroke-linecap':'round'
+    });
+    p.style.opacity = anim ? 0 : 1;
+    g.appendChild(p);
+
+    const t = el('text', {
+      x:(x1 + x2) / 2, y: y - 26,
+      'text-anchor':'middle', 'dominant-baseline':'middle',
+      'font-size':20, 'font-weight':700, fill:color,
+      'font-family':'"PingFang SC","Microsoft YaHei",sans-serif'
+    });
+    t.textContent = label;
+    t.style.opacity = anim ? 0 : 1;
+    g.appendChild(t);
+
+    if(anim){
+      fadeIn(p, delay, 420);
+      fadeIn(t, delay + 140, 420);
+    }
+  }
+
+  /* ---------- 状态与导航 ---------- */
+  const MAX = 6;
+  let cur = 0;
+
+  function goto(n){
+    n = Math.max(0, Math.min(MAX, n));
+
+    while(scene.children.length > n && scene.lastElementChild){
+      scene.removeChild(scene.lastElementChild);
+    }
+    for(let i = scene.children.length + 1; i <= n; i++){
+      buildStep(i, i === n);
+    }
+    cur = n;
+    updateUI(n);
+  }
+
+  const HINTS = [
+    '点击「下一步」，跟老师一起把这条线段画出来。',
+    '直尺压稳纸面，从左到右一笔拉到底；笔杆始终保持与纸面垂直。',
+    '三角板一条直角边贴住 AB，另一条边过 B 向上拉垂线；再用圆规量出 AB 的一半，从 B 向上截到 C。',
+    '直尺的边缘同时压住 A、C 两点，连线时手腕抬起，笔杆竖直。',
+    '针尖扎在 C，笔尖张开落到 B，两针都垂直于纸面；整支圆规匀速转动，弧线与 AC 的交点就是 D。',
+    '针尖移到 A，笔尖张开到 D；同样垂直纸面、匀速转弧，与 AB 的交点就是 P。',
+    '量一量 AP ÷ AB，再量 PB ÷ AP——两个商都是 0.618，这就是黄金比。'
+  ];
+
+  const progress = document.getElementById('progress');
+  for(let i = 1; i <= MAX; i++){
+    const bar = document.createElement('i');
+    bar.dataset.n = i;
+    bar.title = '第 ' + i + ' 步';
+    bar.addEventListener('click', function(){ stop(); goto(Number(this.dataset.n)); });
+    progress.appendChild(bar);
+  }
+
+  function updateUI(n){
+    document.querySelectorAll('#stepList li').forEach(function(li){
+      const k = Number(li.dataset.n);
+      li.classList.toggle('active', k === n);
+      li.classList.toggle('done', k < n);
+    });
+    document.querySelectorAll('.mrow').forEach(function(r){
+      r.classList.toggle('show', Number(r.dataset.need) <= n);
+    });
+    document.getElementById('derive').classList.toggle('show', n >= 6);
+    document.getElementById('hint').textContent = HINTS[n] || HINTS[0];
+
+    Array.prototype.forEach.call(progress.children, function(bar, i){
+      bar.classList.toggle('on', i < n);
+    });
+
+    document.getElementById('prev').disabled = n <= 0;
+    document.getElementById('next').disabled = n >= MAX;
+  }
+
+  function next(){ if(cur < MAX) goto(cur + 1); }
+  function prev(){ if(cur > 0) goto(cur - 1); }
+  function reset(){
+    scene.innerHTML = '';
+    cur = 0;
+    goto(1);
+  }
+
+  /* ---------- 循环播放 ---------- */
+  /* 每一步展示多久（毫秒）：够走完本步动画，再留一点时间给学生看图 */
+  const DWELL = { 1:1700, 2:2200, 3:1800, 4:2200, 5:2200, 6:4000 };
+  const HOLD_END = 3400;   // 停在结论页的时间，之后自动从头开始
+
+  let playing = false;
+  let timer = null;
+
+  function syncPlay(){
+    const b = document.getElementById('play');
+    if(!b) return;
+    b.textContent = playing ? '❙❙ 暂停' : '▶ 循环播放';
+    b.classList.toggle('playing', playing);
+    b.setAttribute('aria-pressed', playing ? 'true' : 'false');
+  }
+
+  function stop(){
+    if(timer){ clearTimeout(timer); timer = null; }
+    if(playing){ playing = false; syncPlay(); }
+  }
+
+  function tick(){
+    if(!playing) return;
+
+    // 已经到结论页：停一会儿，再从头循环
+    if(cur >= MAX){
+      timer = setTimeout(function(){
+        if(!playing) return;
+        reset();
+        timer = setTimeout(tick, DWELL[1]);
+      }, HOLD_END);
+      return;
+    }
+
+    goto(cur + 1);
+    timer = setTimeout(tick, DWELL[cur + 1] || 1900);
+  }
+
+  function start(){
+    if(playing) return;
+    playing = true;
+    syncPlay();
+
+    if(cur >= MAX){                 // 停在结论页时再播，先回到起点
+      reset();
+      timer = setTimeout(tick, DWELL[1]);
+    } else {
+      tick();
+    }
+  }
+
+  function togglePlay(){
+    if(playing) stop();
+    else start();
+  }
+
+  /* ---------- 事件 ---------- */
+  /* 手动操作一律打断自动播放 */
+  document.getElementById('next').addEventListener('click', function(){ stop(); next(); });
+  document.getElementById('prev').addEventListener('click', function(){ stop(); prev(); });
+  document.getElementById('reset').addEventListener('click', function(){ stop(); reset(); });
+  document.getElementById('play').addEventListener('click', togglePlay);
+
+  document.querySelectorAll('#stepList li').forEach(function(li){
+    li.addEventListener('click', function(){ stop(); goto(Number(li.dataset.n)); });
+  });
+
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter'){
+      e.preventDefault(); stop(); next();
+    } else if(e.key === 'ArrowLeft'){
+      e.preventDefault(); stop(); prev();
+    } else if(e.key === 'r' || e.key === 'R'){
+      e.preventDefault(); stop(); reset();
+    } else if(e.key === 'p' || e.key === 'P'){
+      e.preventDefault(); togglePlay();
+    }
+  });
+
+  /* ---------- 启动 ---------- */
+  updateUI(0);
+  setTimeout(function(){ goto(1); }, 420);
+
+})();
+</script>
+
+
+<p id="aigc-visible-label" data-aigc-label="v1" role="note" style="display:block!important;visibility:visible!important;opacity:1!important;position:static!important;color:#808080!important;background:transparent!important;border:0!important;font:10px/1.3 sans-serif!important;text-align:right!important;padding:0!important;margin:4px 0 0!important;height:auto!important;max-height:none!important;overflow:visible!important;">AI生成</p></body></html>
